@@ -12,6 +12,7 @@
 
 # Package Files
 *.jar
+!target/*.jar
 *.war
 *.nar
 *.ear
@@ -24,7 +25,8 @@ hs_err_pid*
 replay_pid*
 
 # Maven
-target/
+target/*
+!target/*.jar
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
