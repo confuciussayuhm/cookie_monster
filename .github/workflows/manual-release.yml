@@ -1,0 +1,128 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.1.0)'
+        required: true
+        default: '1.1.0'
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  manual-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+
+    - name: Download Burp Suite JAR
+      run: |
+        echo "Downloading Burp Suite Community Edition..."
+        wget -q "https://portswigger.net/burp/releases/download?product=community&type=jar" -O burpsuite.jar || true
+
+        if [ -f burpsuite.jar ]; then
+          echo "Extracting Montoya API classes..."
+          unzip -q burpsuite.jar "burp/api/montoya/*" -d burp-api 2>/dev/null || true
+
+          if [ -d burp-api/burp ]; then
+            echo "Compiling Montoya API..."
+            mkdir -p target/classes
+            find burp-api/burp -name "*.class" -exec cp --parents {} target/classes/ \;
+          fi
+        fi
+
+    - name: Build extension
+      run: |
+        echo "Building Cookie Monster v${{ github.event.inputs.version }}..."
+        mkdir -p target/classes
+
+        # Compile extension
+        javac -cp target/classes -d target/classes src/main/java/burp/cookiemonster/*.java
+
+        # Create JAR with version in filename
+        cd target/classes
+        jar cvf ../cookie-monster-${{ github.event.inputs.version }}.jar burp/cookiemonster/*.class
+        cd ../..
+
+        echo "Build completed!"
+        ls -lh target/cookie-monster-${{ github.event.inputs.version }}.jar
+
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        cat > release_notes.md << 'EOF'
+        # Cookie Monster v${{ github.event.inputs.version }}
+
+        A Burp Suite extension that dynamically removes specific cookies from HTTP requests.
+
+        ## Features
+        - Dynamic cookie filtering
+        - Domain-based filtering (All Domains, In-Scope Only, Custom Domain List)
+        - Subdomain support for custom domains
+        - Thread-safe operation across all Burp tools
+        - Real-time cookie management
+
+        ## Installation
+        1. Download `cookie-monster-${{ github.event.inputs.version }}.jar` from the assets below
+        2. Open Burp Suite (Professional or Community Edition)
+        3. Navigate to Extensions → Extensions → Add
+        4. Select "Java" as the extension type
+        5. Choose the downloaded JAR file
+        6. Click "Next" to load the extension
+
+        ## Usage
+        - Navigate to the "Cookie Monster" tab in Burp Suite
+        - Add cookies to block in the left panel
+        - Configure domain filtering in the right panel (All Domains, In-Scope Only, or Custom Domain List)
+        - Blocked cookies will be automatically removed from matching requests
+
+        ## Requirements
+        - Burp Suite Professional or Community Edition (2025.10 or later recommended)
+        - Java 11 or higher
+        - Compatible with Montoya API 2025.10
+
+        ## Support
+        For issues, feature requests, or questions, please visit the [GitHub repository](https://github.com/${{ github.repository }}).
+        EOF
+
+    - name: Create or update tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}" || true
+        git push origin "v${{ github.event.inputs.version }}" || true
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ github.event.inputs.version }}
+        name: Cookie Monster v${{ github.event.inputs.version }}
+        body_path: release_notes.md
+        files: |
+          target/cookie-monster-${{ github.event.inputs.version }}.jar
+        draft: false
+        prerelease: ${{ github.event.inputs.prerelease }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cookie-monster-${{ github.event.inputs.version }}
+        path: target/cookie-monster-${{ github.event.inputs.version }}.jar
+        retention-days: 90
