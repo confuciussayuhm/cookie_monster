@@ -69,7 +69,7 @@ public class CookieMonsterUI extends JPanel {
 
         // Header with description
         JPanel headerPanel = new JPanel(new BorderLayout(5, 5));
-        JLabel descLabel = new JLabel("Cookies in this list will be automatically removed from requests");
+        JLabel descLabel = new JLabel("Cookies in this list will be automatically removed from requests (paste space-separated names)");
         descLabel.setFont(new Font(descLabel.getFont().getName(), Font.PLAIN, 12));
         descLabel.setForeground(Color.GRAY);
         headerPanel.add(descLabel, BorderLayout.NORTH);
@@ -321,24 +321,61 @@ public class CookieMonsterUI extends JPanel {
     // Cookie management methods
 
     private void addCookie() {
-        String cookieName = cookieNameField.getText().trim();
+        String input = cookieNameField.getText().trim();
 
-        if (cookieName.isEmpty()) {
+        if (input.isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                    "Please enter a cookie name",
+                    "Please enter one or more cookie names (space-separated)",
                     "Invalid Input",
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        if (blocklistManager.addCookie(cookieName)) {
-            cookieListModel.addElement(cookieName);
-            cookieNameField.setText("");
-            cookieNameField.requestFocus();
-        } else {
+        // Split by whitespace to support multiple cookies
+        String[] cookieNames = input.split("\\s+");
+        int addedCount = 0;
+        int duplicateCount = 0;
+        StringBuilder duplicates = new StringBuilder();
+
+        for (String cookieName : cookieNames) {
+            cookieName = cookieName.trim();
+            if (!cookieName.isEmpty()) {
+                if (blocklistManager.addCookie(cookieName)) {
+                    cookieListModel.addElement(cookieName);
+                    addedCount++;
+                } else {
+                    duplicateCount++;
+                    if (duplicates.length() > 0) {
+                        duplicates.append(", ");
+                    }
+                    duplicates.append(cookieName);
+                }
+            }
+        }
+
+        // Clear the input field and refocus
+        cookieNameField.setText("");
+        cookieNameField.requestFocus();
+
+        // Show feedback message
+        if (addedCount > 0 && duplicateCount > 0) {
             JOptionPane.showMessageDialog(this,
-                    "Cookie '" + cookieName + "' is already in the blocklist",
-                    "Duplicate Cookie",
+                    String.format("Added %d cookie(s).\n%d duplicate(s) skipped: %s",
+                            addedCount, duplicateCount, duplicates.toString()),
+                    "Cookies Added",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } else if (addedCount > 0) {
+            if (addedCount > 1) {
+                JOptionPane.showMessageDialog(this,
+                        String.format("Successfully added %d cookies to the blocklist", addedCount),
+                        "Cookies Added",
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
+            // For single cookie, no message needed (original behavior)
+        } else if (duplicateCount > 0) {
+            JOptionPane.showMessageDialog(this,
+                    String.format("Cookie(s) already in blocklist: %s", duplicates.toString()),
+                    "Duplicate Cookies",
                     JOptionPane.INFORMATION_MESSAGE);
         }
     }
